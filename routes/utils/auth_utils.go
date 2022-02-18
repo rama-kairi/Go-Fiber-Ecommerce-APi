@@ -14,6 +14,12 @@ import (
 
 // AuthUtils is a struct that contains all the functions that are used to authenticate the user.
 
+type TokenType struct {
+	UserID       int    `json:"user_id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 // HashPassword - hashes the password.
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), 14)
@@ -54,25 +60,29 @@ func GenerateToken(userID uint, tokenType string) (string, error) {
 // VerifyToken - Validates the token.
 func VerifyToken(tokenString string) (*jwt.Token, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// if _, isValid := token.Method.(*jwt.SigningMethodRSA); !isValid {
-		// 	return nil, jwt.ErrSignatureInvalid
-		// }
+		if _, isValid := token.Method.(*jwt.SigningMethodHMAC); !isValid {
+			return nil, jwt.ErrSignatureInvalid
+		}
 		return []byte(config.GetConfig().Jwt.Secret), nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return token, nil
+	return token, err
 }
 
 // DecodeToken - decodes the token.
-func DecodeToken(tokenString string) (jwt.MapClaims, error) {
+func DecodeToken(tokenString string, tokenType string) (jwt.MapClaims, error) {
 	token, err := VerifyToken(tokenString)
 	if err != nil {
 		return nil, err
 	}
 
 	claims, isOk := token.Claims.(jwt.MapClaims)
+	if _tokentype := claims["type"]; _tokentype != tokenType {
+		return nil, fmt.Errorf("invalid token type: %s", tokenType)
+	}
+
 	if isOk && token.Valid {
 		return claims, nil
 	}

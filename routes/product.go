@@ -28,7 +28,11 @@ func CreateProduct(c *fiber.Ctx) error {
 		})
 	}
 
-	database.Database.Db.Create(&product)
+	if err := database.Database.Db.Create(&product).Error; err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
 
 	responseProduct := ProductResponse(product)
 

@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"strings"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/rama-kairi/fiber-api/database"
 	"github.com/rama-kairi/fiber-api/models"
@@ -71,9 +73,7 @@ func Signup(c *fiber.Ctx) error {
 		})
 	}
 
-	responseUser := ResponseUser(user)
-
-	return c.Status(fiber.StatusCreated).JSON(responseUser)
+	return c.Status(fiber.StatusCreated).JSON(ResponseUser(user))
 }
 
 // Login - Login a user
@@ -122,6 +122,70 @@ func Login(c *fiber.Ctx) error {
 	})
 }
 
+// UserMe - Returns the current user
+func UserMe(c *fiber.Ctx) error {
+	tokenString := strings.Split(c.Get("Authorization"), " ")[1]
+	claims, err := utils.DecodeToken(tokenString, "access")
+	if err != nil {
+		return err
+	}
+
+	var user models.User
+	userId := int(claims["user_id"].(float64))
+
+	database.Database.Db.First(&user, int(userId))
+
+	if user.ID == 0 {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(ResponseUser(user))
+}
+
+// Refresh - Refresh the access token
+func Refresh(c *fiber.Ctx) error {
+	refreshToken := strings.Split(c.Get("Authorization"), " ")[1]
+	if refreshToken == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Refresh token not found",
+		})
+	}
+
+	claims, err := utils.DecodeToken(refreshToken, "refresh")
+	if err != nil {
+		return err
+	}
+
+	var user models.User
+	userId := int(claims["user_id"].(float64))
+
+	database.Database.Db.First(&user, int(userId))
+
+	// Getting Access Token
+	access_token, err := utils.GenerateToken(user.ID, "access")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Getting Refresh Token
+	refresh_token, err := utils.GenerateToken(user.ID, "refresh")
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"user_id":       user.ID,
+		"access_token":  access_token,
+		"refresh_token": refresh_token,
+	})
+}
+
 // GetAllUsers returns all users
 func GetAllUsers(c *fiber.Ctx) error {
 	var users []models.User
@@ -134,7 +198,7 @@ func GetAllUsers(c *fiber.Ctx) error {
 		responseUsers[i] = ResponseUser(user)
 	}
 
-	return c.JSON(responseUsers)
+	return c.Status(fiber.StatusOK).JSON(responseUsers)
 }
 
 // GetUser returns a user by id
@@ -151,9 +215,7 @@ func GetUser(c *fiber.Ctx) error {
 		})
 	}
 
-	responseUser := ResponseUser(user)
-
-	return c.Status(fiber.StatusOK).JSON(responseUser)
+	return c.Status(fiber.StatusOK).JSON(ResponseUser(user))
 }
 
 // UpdateUser updates a user by id
@@ -178,9 +240,7 @@ func UpdateUser(c *fiber.Ctx) error {
 
 	database.Database.Db.Save(&user)
 
-	responseUser := ResponseUser(user)
-
-	return c.Status(fiber.StatusOK).JSON(responseUser)
+	return c.Status(fiber.StatusOK).JSON(ResponseUser(user))
 }
 
 // DeleteUser deletes a user by id
